@@ -8,15 +8,24 @@ services:
       MYSQL_DATABASE: appdb
       MYSQL_USER: appuser
       MYSQL_PASSWORD: apppassword
+    # Ajusta la ruta según tu estructura real:
     volumes:
-      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     networks:
       - test-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      retries: 10
 
   test-redis:
     image: redis:7-alpine
     networks:
       - test-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
 
   test-web:
     build: ./app
@@ -29,15 +38,26 @@ services:
       REDIS_HOST: test-redis
       REDIS_PORT: 6379
       SECRET_KEY: "test_key"
+      PYTHONUNBUFFERED: 1
     depends_on:
-      - test-mysql
-      - test-redis
+      test-mysql:
+        condition: service_healthy
+      test-redis:
+        condition: service_healthy
     networks:
       - test-network
+    volumes:
+      # Volumen temporal para la caché de pytest
+      - pytest_cache:/app/.pytest_cache
     command: >
-      sh -c "python wait_for_db.py --host test-mysql --port 3306 --user appuser --password apppassword --database appdb --timeout 30 &&
-             python -m pytest tests/ -v"
+      sh -c "
+        python wait_for_db.py --host test-mysql --port 3306 --user appuser --password apppassword --database appdb --timeout 30 &&
+        python -m pytest tests/ -v
+      "
 
 networks:
   test-network:
     driver: bridge
+
+volumes:
+  pytest_cache:
