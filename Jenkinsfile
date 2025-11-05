@@ -6,6 +6,27 @@ pipeline {
     }
     
     stages {
+        stage('Checkout Code') {
+            steps {
+                checkout scm
+                sh '''
+                    echo "=== Verificando archivos después del checkout ==="
+                    pwd
+                    ls -la
+                    echo "=== Verificando docker-compose.test.yml ==="
+                    if [ -f "docker-compose.test.yml" ]; then
+                        echo "✅ docker-compose.test.yml encontrado"
+                        cat docker-compose.test.yml | head -20
+                    else
+                        echo "❌ ERROR: docker-compose.test.yml NO encontrado"
+                        echo "Archivos YML disponibles:"
+                        find . -name "*.yml" -o -name "*.yaml"
+                        exit 1
+                    fi
+                '''
+            }
+        }
+        
         stage('Verify Environment') {
             steps {
                 sh '''
@@ -43,19 +64,19 @@ pipeline {
             steps {
                 sh '''
                     echo "=== Ejecutando tests con aplicación ==="
+                    # Iniciar solo el servicio web que ejecutará los tests
                     docker-compose -f docker-compose.test.yml up --abort-on-container-exit --exit-code-from test-web
                 '''
             }
             post {
                 always {
                     sh '''
-                        echo "=== Guardando logs de test ==="
+                        echo "=== Limpiando entorno de test ==="
+                        docker-compose -f docker-compose.test.yml down
+                        # Guardar logs para diagnóstico
                         docker-compose -f docker-compose.test.yml logs --no-color > test_logs.txt 2>&1 || true
-                        echo "=== Logs guardados correctamente ==="
-                        tail -n 50 test_logs.txt || true
-
-                        echo "=== Deteniendo entorno de test ==="
-                        docker-compose -f docker-compose.test.yml down || true
+                        echo "=== Logs de test guardados ==="
+                        cat test_logs.txt | tail -50
                     '''
                     archiveArtifacts artifacts: 'test_logs.txt', allowEmptyArchive: true
                 }
@@ -71,7 +92,6 @@ pipeline {
                     echo "=== Desplegando entorno de desarrollo ==="
                     docker-compose down || true
                     docker-compose up -d
-                    echo "=== Esperando que Flask se inicie ==="
                     sleep 30
                 '''
             }
@@ -88,14 +108,14 @@ pipeline {
                         while true; do
                             if curl -s -f http://localhost:5000/login > /dev/null; then
                                 echo "✅ Aplicación Flask respondiendo"
-
-                                # Acepta "Register" o "Registro" (por si el idioma varía)
-                                if curl -s http://localhost:5000/register | grep -iq "register\\|registro"; then
+                                
+                                # Probar que la base de datos funciona haciendo una consulta simple
+                                if curl -s http://localhost:5000/register | grep -q "Register"; then
                                     echo "✅ Formulario de registro accesible"
                                     echo "🎉 Todas las pruebas pasaron correctamente"
                                     break
                                 else
-                                    echo "⏳ Esperando servicios..."
+                                    echo "⏳ Esperando que todos los servicios estén listos..."
                                     sleep 10
                                 fi
                             else
@@ -110,6 +130,15 @@ pipeline {
     }
     
     post {
+        always {
+            sh '''
+                echo "=== Limpiando entorno de desarrollo ==="
+                docker-compose down || true
+                # Limpiar recursos Docker
+                docker system prune -f || true
+            '''
+            cleanWs()
+        }
         success {
             echo "🎉 Pipeline COMPLETADO EXITOSAMENTE"
         }
@@ -121,16 +150,6 @@ pipeline {
                 echo "=== Últimos logs de Test Web ==="
                 docker-compose -f docker-compose.test.yml logs test-web | tail -30 || true
             '''
-        }
-        always {
-            sh '''
-                echo "=== Limpiando entorno de desarrollo ==="
-                docker-compose down || true
-                echo "=== Liberando espacio Docker ==="
-                docker system prune -f || true
-            '''
-            // 🔹 Se limpia el workspace al final, no antes de leer los logs
-            cleanWs()
         }
     }
 }
