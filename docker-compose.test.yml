@@ -51,10 +51,11 @@ services:
     networks:
       - test-network
     volumes:
-      # ✅ Montar volumen temporal para pytest_cache (evita advertencias de permisos)
+      # ✅ Volumen temporal para pytest_cache (evita errores de permisos)
       - pytest_cache:/app/.pytest_cache
     command: >
       sh -c "
+        mkdir -p /app/.pytest_cache && chmod -R 777 /app/.pytest_cache &&
         python wait_for_db.py --host test-mysql --port 3306 --user appuser --password apppassword --database appdb --timeout 30 &&
         python -m pytest tests/ -v
       "
