@@ -6,40 +6,40 @@ LABEL maintainer="docente@example.org"
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# instalar utilidades mínimas
+# Instalar dependencias del sistema
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     default-libmysqlclient-dev \
     pkg-config \
     curl \
-    bash \
-  && rm -rf /var/lib/apt/lists/*
+    bash && \
+    rm -rf /var/lib/apt/lists/*
 
-# crear usuario no-root
+# Crear usuario no root
 RUN useradd --create-home --shell /bin/bash appuser
 
-# usar /app como WORKDIR para coincidir con docker-compose si usas ambos enfoques
 WORKDIR /app
 
-# Copiar requirements (para cache de Docker)
+# Copiar dependencias
 COPY --chown=appuser:appuser requirements.txt .
 
-# Instalar dependencias de Python
-RUN pip install --no-cache-dir --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install pytest pylint
+# Instalar pip y dependencias (como root)
+RUN pip install --no-cache-dir --upgrade pip --root-user-action=ignore && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install pytest pylint && \
+    apt-get purge -y build-essential pkg-config && apt-get autoremove -y
 
-# Copiar el resto de la aplicación
+# Copiar código fuente
 COPY --chown=appuser:appuser . .
 
-# Dar permisos de ejecución
-RUN chmod -R 755 /app && \
-    mkdir -p /app/.pytest_cache && \
-    chmod 777 /app/.pytest_cache
+# Permisos
+RUN chmod -R 755 /app && chmod +x entrypoint.sh wait_for_db.py
 
-RUN chmod +x entrypoint.sh wait_for_db.py
-
+# Cambiar a usuario appuser
 USER appuser
+
+# Crear cache pytest con permisos correctos
+RUN mkdir -p /app/.pytest_cache && chmod -R 777 /app/.pytest_cache
 
 EXPOSE 5000
 
