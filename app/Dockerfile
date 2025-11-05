@@ -5,50 +5,42 @@ LABEL maintainer="docente@example.org"
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
-ENV PIP_ROOT_USER_ACTION=ignore
-ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 
-# Instalar dependencias del sistema necesarias
+# instalar utilidades mínimas
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     default-libmysqlclient-dev \
     pkg-config \
     curl \
-    bash && \
-    rm -rf /var/lib/apt/lists/*
+    bash \
+  && rm -rf /var/lib/apt/lists/*
 
-# Crear usuario no root
+# crear usuario no-root
 RUN useradd --create-home --shell /bin/bash appuser
 
-# Crear carpeta del proyecto y asignar permisos
-RUN mkdir -p /app && chown -R appuser:appuser /app
-
-# Establecer el directorio de trabajo
+# usar /app como WORKDIR para coincidir con docker-compose si usas ambos enfoques
 WORKDIR /app
 
-# Copiar dependencias primero (aprovecha la caché de Docker)
-COPY --chown=appuser:appuser requirements.txt ./
+# Copiar requirements (para cache de Docker)
+COPY --chown=appuser:appuser requirements.txt .
 
 # Instalar dependencias de Python
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt && \
-    pip install --no-cache-dir pytest pylint && \
-    apt-get purge -y build-essential pkg-config && apt-get autoremove -y && \
-    rm -rf /root/.cache/pip
+RUN pip install --no-cache-dir --upgrade pip
+RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install pytest pylint
 
-# Copiar el código fuente de la aplicación
+# Copiar el resto de la aplicación
 COPY --chown=appuser:appuser . .
 
-# Ajustar permisos y scripts ejecutables
-RUN chown -R appuser:appuser /app && \
-    chmod -R 755 /app && \
-    chmod +x entrypoint.sh wait_for_db.py || true
+# Dar permisos de ejecución
+RUN chmod -R 755 /app && \
+    mkdir -p /app/.pytest_cache && \
+    chmod 777 /app/.pytest_cache
 
-# Cambiar a usuario no root
+RUN chmod +x entrypoint.sh wait_for_db.py
+
 USER appuser
 
-# Exponer el puerto de Flask
 EXPOSE 5000
 
-# Comando de inicio del contenedor
 CMD ["./entrypoint.sh"]
