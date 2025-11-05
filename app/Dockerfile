@@ -8,7 +8,7 @@ ENV PYTHONUNBUFFERED=1
 ENV PIP_ROOT_USER_ACTION=ignore
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 
-# Instalar dependencias del sistema
+# Instalar dependencias del sistema necesarias para compilar y conectar con MySQL
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     default-libmysqlclient-dev \
@@ -20,31 +20,35 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Crear usuario no root
 RUN useradd --create-home --shell /bin/bash appuser
 
-# Crear carpeta del proyecto con permisos adecuados
-RUN mkdir -p /app/.pytest_cache && chown -R appuser:appuser /app
+# Crear carpeta del proyecto y asignar permisos
+RUN mkdir -p /app && chown -R appuser:appuser /app
 
+# Definir directorio de trabajo
 WORKDIR /app
 
-# Copiar dependencias primero (aprovecha caché de Docker)
-COPY --chown=appuser:appuser requirements.txt .
+# Copiar dependencias primero (para aprovechar la caché de Docker)
+COPY --chown=appuser:appuser requirements.txt ./
 
-# Instalar pip y dependencias como root
+# Instalar dependencias de Python
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt && \
     pip install --no-cache-dir pytest pylint && \
-    apt-get purge -y build-essential pkg-config && apt-get autoremove -y
+    apt-get purge -y build-essential pkg-config && apt-get autoremove -y && \
+    rm -rf /root/.cache/pip
 
-# Copiar el código fuente de la aplicación
+# Copiar el código fuente
 COPY --chown=appuser:appuser . .
 
-# Ajustar permisos y scripts ejecutables
-RUN chmod -R 755 /app && chmod +x entrypoint.sh wait_for_db.py
+# Ajustar ownership y permisos (evita el error "Operation not permitted")
+RUN chown -R appuser:appuser /app && \
+    chmod -R 755 /app && \
+    chmod +x entrypoint.sh wait_for_db.py
 
-# Cambiar a usuario no root
+# Cambiar al usuario no root
 USER appuser
 
-# Exponer el puerto de Flask
+# Exponer el puerto Flask
 EXPOSE 5000
 
-# Ejecutar el contenedor
+# Comando de inicio del contenedor
 CMD ["./entrypoint.sh"]
