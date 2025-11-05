@@ -8,15 +8,17 @@ services:
       MYSQL_DATABASE: appdb
       MYSQL_USER: appuser
       MYSQL_PASSWORD: apppassword
-    # Ajusta la ruta según tu estructura real:
+    # ✅ Ruta absoluta (funciona en Jenkins o local)
     volumes:
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - ${PWD}/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - test-network
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
       interval: 5s
+      timeout: 3s
       retries: 10
+      start_period: 15s
 
   test-redis:
     image: redis:7-alpine
@@ -25,7 +27,9 @@ services:
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
+      timeout: 3s
       retries: 10
+      start_period: 5s
 
   test-web:
     build: ./app
@@ -47,7 +51,7 @@ services:
     networks:
       - test-network
     volumes:
-      # Volumen temporal para la caché de pytest
+      # ✅ Montar volumen temporal para pytest_cache (evita advertencias de permisos)
       - pytest_cache:/app/.pytest_cache
     command: >
       sh -c "
