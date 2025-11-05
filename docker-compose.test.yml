@@ -8,7 +8,7 @@ services:
       MYSQL_DATABASE: appdb
       MYSQL_USER: appuser
       MYSQL_PASSWORD: apppassword
-    # ✅ Ruta absoluta (funciona en Jenkins o local)
+    # ✅ Ruta absoluta — evita errores de montaje en Jenkins o Linux
     volumes:
       - ${PWD}/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
@@ -50,12 +50,14 @@ services:
         condition: service_healthy
     networks:
       - test-network
+    # ✅ Se asegura de que pytest pueda escribir su caché sin errores de permisos
     volumes:
-      # ✅ Volumen temporal para pytest_cache (evita errores de permisos)
       - pytest_cache:/app/.pytest_cache
     command: >
       sh -c "
-        mkdir -p /app/.pytest_cache && chmod -R 777 /app/.pytest_cache &&
+        mkdir -p /app/.pytest_cache &&
+        chmod -R 777 /app/.pytest_cache &&
+        echo '✅ Cache creada y con permisos' &&
         python wait_for_db.py --host test-mysql --port 3306 --user appuser --password apppassword --database appdb --timeout 30 &&
         python -m pytest tests/ -v
       "
