@@ -8,8 +8,8 @@ services:
       MYSQL_DATABASE: appdb
       MYSQL_USER: appuser
       MYSQL_PASSWORD: apppassword
-    # ✅ Ruta absoluta — evita errores de montaje en Jenkins o Linux
     volumes:
+      # ✅ Ruta absoluta segura (evita errores en Jenkins)
       - ${PWD}/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - test-network
@@ -32,39 +32,38 @@ services:
       start_period: 5s
 
   test-web:
-    build: ./app
-    environment:
-      MYSQL_HOST: test-mysql
-      MYSQL_PORT: 3306
-      MYSQL_USER: appuser
-      MYSQL_PASSWORD: apppassword
-      MYSQL_DATABASE: appdb
-      REDIS_HOST: test-redis
-      REDIS_PORT: 6379
-      SECRET_KEY: "test_key"
-      PYTHONUNBUFFERED: 1
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    container_name: test-web
     depends_on:
       test-mysql:
         condition: service_healthy
       test-redis:
         condition: service_healthy
-    networks:
-      - test-network
-    # ✅ Se asegura de que pytest pueda escribir su caché sin errores de permisos
-    volumes:
-      - pytest_cache:/app/.pytest_cache
+    environment:
+      MYSQL_HOST: test-mysql
+      MYSQL_USER: appuser
+      MYSQL_PASSWORD: apppassword
+      MYSQL_DATABASE: appdb
+      REDIS_HOST: test-redis
+      FLASK_ENV: testing
+      PYTHONUNBUFFERED: 1
+    # ✅ Usa root solo en pruebas (evita errores de permisos)
+    user: root
     command: >
-      sh -c "
+      bash -c "
         mkdir -p /app/.pytest_cache &&
         chmod -R 777 /app/.pytest_cache &&
-        echo '✅ Cache creada y con permisos' &&
+        echo '=== Ejecutando tests con pytest ===' &&
         python wait_for_db.py --host test-mysql --port 3306 --user appuser --password apppassword --database appdb --timeout 30 &&
-        python -m pytest tests/ -v
+        pytest --maxfail=1 --disable-warnings -v
       "
+    volumes:
+      - .:/app
+    networks:
+      - test-network
 
 networks:
   test-network:
     driver: bridge
-
-volumes:
-  pytest_cache:
