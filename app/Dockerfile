@@ -8,7 +8,7 @@ ENV PYTHONUNBUFFERED=1
 ENV PIP_ROOT_USER_ACTION=ignore
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 
-# Instalar dependencias del sistema necesarias para compilar y conectar con MySQL
+# Instalar dependencias del sistema necesarias
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     default-libmysqlclient-dev \
@@ -23,10 +23,10 @@ RUN useradd --create-home --shell /bin/bash appuser
 # Crear carpeta del proyecto y asignar permisos
 RUN mkdir -p /app && chown -R appuser:appuser /app
 
-# Definir directorio de trabajo
+# Establecer el directorio de trabajo
 WORKDIR /app
 
-# Copiar dependencias primero (para aprovechar la caché de Docker)
+# Copiar dependencias primero (aprovecha la caché de Docker)
 COPY --chown=appuser:appuser requirements.txt ./
 
 # Instalar dependencias de Python
@@ -36,18 +36,18 @@ RUN pip install --no-cache-dir --upgrade pip && \
     apt-get purge -y build-essential pkg-config && apt-get autoremove -y && \
     rm -rf /root/.cache/pip
 
-# Copiar el código fuente
+# Copiar el código fuente de la aplicación
 COPY --chown=appuser:appuser . .
 
-# Ajustar ownership y permisos (evita el error "Operation not permitted")
+# Ajustar permisos y scripts ejecutables
 RUN chown -R appuser:appuser /app && \
     chmod -R 755 /app && \
-    chmod +x entrypoint.sh wait_for_db.py
+    chmod +x entrypoint.sh wait_for_db.py || true
 
-# Cambiar al usuario no root
+# Cambiar a usuario no root
 USER appuser
 
-# Exponer el puerto Flask
+# Exponer el puerto de Flask
 EXPOSE 5000
 
 # Comando de inicio del contenedor
